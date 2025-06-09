@@ -173,14 +173,21 @@ void get_location()
     Serial.print("\tyaw_z_from_Madgwick:");
     Serial.println(drone_state.yaw_z_from_Madgwick);
 
-    // // get current angular movements
-    // drone_state.droll_x  = integrator_gx->update(drone_state.gx, dt);   // получаем углы через угловые скорости
-    // drone_state.dpitch_y = integrator_gy->update(drone_state.gy, dt);
-    // drone_state.dyaw_z   = integrator_gz->update(drone_state.gz, dt);
+    // get current angular movements
+    drone_state.droll_x  = integrator_gx->update(drone_state.gx, dt);   // получаем углы через угловые скорости
+    drone_state.dpitch_y = integrator_gy->update(drone_state.gy, dt);
+    drone_state.dyaw_z   = integrator_gz->update(drone_state.gz, dt);
 
-    // drone_state.roll_x  += drone_state.droll_x;
-    // drone_state.pitch_y += drone_state.dpitch_y;
-    // drone_state.yaw_z   += drone_state.dyaw_z;
+    drone_state.roll_x  += drone_state.droll_x;
+    drone_state.pitch_y += drone_state.dpitch_y;
+    drone_state.yaw_z   += drone_state.dyaw_z;
+
+    // Serial.print("     roll_x:");
+    // Serial.print(drone_state.roll_x);
+    // Serial.print("     pitch_y:");
+    // Serial.print(drone_state.pitch_y);
+    // Serial.print("     yaw_z:");
+    // Serial.println(drone_state.yaw_z);
 
     calculate_aW();                                                     // получаем мировые ускорения
 
@@ -226,12 +233,7 @@ void get_location()
 
 
 
-    // Serial.print("     roll_x:");
-    // Serial.print(drone_state.roll_x);
-    // Serial.print("     pitch_y:");
-    // Serial.print(drone_state.pitch_y);
-    // Serial.print("     yaw_z:");
-    // Serial.println(drone_state.yaw_z);
+
 
     // Serial.print("\tax:");
     // Serial.print(drone_state.ax);
@@ -336,9 +338,9 @@ void get_location()
     float azW;        // расчетное
     
     // angular
-    // float roll_x  = 0;
-    // float pitch_y = 0;
-    // float yaw_z   = 0;
+    float roll_x  = 0;
+    float pitch_y = 0;
+    float yaw_z   = 0;
     float roll_x_from_ax_rad  = 0;
     float pitch_y_from_ay_rad = 0;
     float yaw_z_from_az_rad   = 0;
@@ -347,9 +349,9 @@ void get_location()
     float pitch_y_from_Madgwick = 0;
     float yaw_z_from_Madgwick   = 0;
 
-    // float droll_x;
-    // float dpitch_y;
-    // float dyaw_z;
+    float droll_x;
+    float dpitch_y;
+    float dyaw_z;
     float gx;
     float gy;
     float gz;
