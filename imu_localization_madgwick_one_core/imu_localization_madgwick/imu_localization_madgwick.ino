@@ -26,7 +26,7 @@ TinyGPSPlus gps;
 const int up   = 1;
 const int down = -1;
 
-int update_freq = 30;             // Hz
+int update_freq = 200;             // Hz
 
 GY_85 GY85;
 Madgwick filter;
@@ -120,17 +120,14 @@ void get_location()
 
   void update_state(float dt){        // dt - [sec]
 
+    // Serial.println(dt, 6);
+
     // gps_update();
 
     // Serial.println("update_state update_state update_state update_state update_state update_state update_state update_state");
 
             // START COMMUNICATION WITH IMU //
             
-    Wire.beginTransmission(ADXL345);
-    Wire.write(0x32); // Start with register 0x32 (ACCEL_XOUT_H)
-    Wire.endTransmission(false);
-    Wire.requestFrom(ADXL345, 6, true);
-
             // GET DATA FROM SENSOR //
 
     // get current linear acceleration
@@ -143,12 +140,12 @@ void get_location()
     Z_out = GY85.accelerometer_z(accelerometerReadings);
     drone_state.az = (float)Z_out / 128.0;
 
-    Serial.print("drone_state.ax:");
-    Serial.print(drone_state.ax);
-    Serial.print("\tdrone_state.ay:");
-    Serial.print(drone_state.ay);
-    Serial.print("\tdrone_state.az:");
-    Serial.println(drone_state.az);
+    // Serial.print("drone_state.ax:");
+    // Serial.print(drone_state.ax);
+    // Serial.print("\tdrone_state.ay:");
+    // Serial.print(drone_state.ay);
+    // Serial.print("\tdrone_state.az:");
+    // Serial.println(drone_state.az);
 
     // get current angular velocities
     int16_t* gyroReadings = GY85.readGyro();
@@ -165,9 +162,16 @@ void get_location()
 
                 // CALCULATE //
 
-    do_offset_accelerations();                                  // получаю сырые ускорения в СК робота
-    kalman_filter();                                            // получаю отфильтрованные ускорения в СК робота
+    // do_offset_accelerations();                                  // получаю сырые ускорения в СК робота
+    // kalman_filter();                                            // получаю отфильтрованные ускорения в СК робота
     madgwick_filter();                                          // получаю ориентацию робота
+
+    Serial.print("roll_x_from_Madgwick:");
+    Serial.print(drone_state.roll_x_from_Madgwick);
+    Serial.print("\tpitch_y_from_Madgwick:");
+    Serial.print(drone_state.pitch_y_from_Madgwick);
+    Serial.print("\tyaw_z_from_Madgwick:");
+    Serial.println(drone_state.yaw_z_from_Madgwick);
 
     // // get current angular movements
     // drone_state.droll_x  = integrator_gx->update(drone_state.gx, dt);   // получаем углы через угловые скорости
@@ -220,12 +224,7 @@ void get_location()
     velFromIMU   = trunc(drone_state.vxW*1000);
     moveFromIMU  = trunc(drone_state.xW*1000);
 
-    // Serial.print("roll_x_from_Madgwick:");
-    // Serial.print(drone_state.roll_x_from_Madgwick);
-    // Serial.print("\tpitch_y_from_Madgwick:");
-    // Serial.print(drone_state.pitch_y_from_Madgwick);
-    // Serial.print("\tyaw_z_from_Madgwick:");
-    // Serial.println(drone_state.yaw_z_from_Madgwick);
+
 
     // Serial.print("     roll_x:");
     // Serial.print(drone_state.roll_x);
@@ -514,6 +513,6 @@ void loop() {
   drone.update_state(1./update_freq);
   // Serial.print("     time [ms]: ");
   unsigned long end = millis();
-  // Serial.println(end - start);
   delay(1000/update_freq - (end - start));
+  // Serial.println(millis() - start);
 }
