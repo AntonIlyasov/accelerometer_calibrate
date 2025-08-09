@@ -26,7 +26,7 @@ TinyGPSPlus gps;
 const int up   = 1;
 const int down = -1;
 
-int update_freq = 200;             // Hz
+int update_freq = 30;             // Hz
 
 GY_85 GY85;
 Madgwick filter;
@@ -88,6 +88,21 @@ public:
     drone_state.yaw_z_from_Madgwick   = filter.getYaw()   - drone_state.offset_yaw_z;
   }
 
+  void madgwick_filter_with_compass(){
+    filter.update(drone_state.gx, drone_state.gy, drone_state.gz, 
+                  drone_state.ax, drone_state.ay, drone_state.az, 
+                  drone_state.mx, drone_state.my, drone_state.mz);
+    if (drone_state.firstMadgwickMeasure){
+      drone_state.offset_roll_x   = filter.getRoll();
+      drone_state.offset_pitch_y  = filter.getPitch();
+      drone_state.offset_yaw_z    = filter.getYaw();
+      drone_state.firstMadgwickMeasure = false;
+    }
+    drone_state.roll_x_from_Madgwick  = filter.getRoll()  - drone_state.offset_roll_x;
+    drone_state.pitch_y_from_Madgwick = filter.getPitch() - drone_state.offset_pitch_y;
+    drone_state.yaw_z_from_Madgwick   = filter.getYaw()   - drone_state.offset_yaw_z; 
+  }
+
   void kalman_filter(){
     drone_state.ax = (1 - kalman_x) * drone_state.ax_prev + kalman_x * drone_state.ax;
     drone_state.ay = (1 - kalman_y) * drone_state.ay_prev + kalman_y * drone_state.ay;
@@ -130,7 +145,7 @@ void get_location()
             
             // GET DATA FROM SENSOR //
 
-    // get current linear acceleration
+    // ускорения в СК сенсора
     int16_t X_out, Y_out, Z_out;  // Outputs
     int16_t* accelerometerReadings = GY85.readFromAccelerometer();
     X_out = GY85.accelerometer_x(accelerometerReadings);
@@ -147,11 +162,17 @@ void get_location()
     // Serial.print("\tdrone_state.az:");
     // Serial.println(drone_state.az);
 
-    // get current angular velocities
+    int16_t* compassReadings = GY85.readFromCompass();
+    int16_t cx = GY85.compass_x(compassReadings);
+    int16_t cy = GY85.compass_y(compassReadings);
+    int16_t cz = GY85.compass_z(compassReadings);
+
+    // угловые скорости в СК сенсора
     int16_t* gyroReadings = GY85.readGyro();
     drone_state.gx = GY85.gyro_x(gyroReadings);                 // получаем сырые угловые скорости
     drone_state.gy = GY85.gyro_y(gyroReadings);
     drone_state.gz = GY85.gyro_z(gyroReadings);
+    drone_state.gt = GY85.temp(gyroReadings);
 
     // Serial.print("drone_state.gx:");
     // Serial.print(drone_state.gx);
@@ -163,24 +184,25 @@ void get_location()
                 // CALCULATE //
 
     // do_offset_accelerations();                                  // получаю сырые ускорения в СК робота
-    // kalman_filter();                                            // получаю отфильтрованные ускорения в СК робота
-    madgwick_filter();                                          // получаю ориентацию робота
+    // kalman_filter();                                            // фигня, переделать
+    madgwick_filter();                                          // получаю ориентацию робота без учета компаса
+    madgwick_filter_with_compass();                             // ориентация с компасом
 
-    Serial.print("roll_x_from_Madgwick:");
-    Serial.print(drone_state.roll_x_from_Madgwick);
-    Serial.print("\tpitch_y_from_Madgwick:");
-    Serial.print(drone_state.pitch_y_from_Madgwick);
-    Serial.print("\tyaw_z_from_Madgwick:");
-    Serial.println(drone_state.yaw_z_from_Madgwick);
+    // Serial.print("roll_x_from_Madgwick:");
+    // Serial.print(drone_state.roll_x_from_Madgwick);
+    // Serial.print("\tpitch_y_from_Madgwick:");
+    // Serial.print(drone_state.pitch_y_from_Madgwick);
+    // Serial.print("\tyaw_z_from_Madgwick:");
+    // Serial.print(drone_state.yaw_z_from_Madgwick);
 
-    // get current angular movements
-    drone_state.droll_x  = integrator_gx->update(drone_state.gx, dt);   // получаем углы через угловые скорости
-    drone_state.dpitch_y = integrator_gy->update(drone_state.gy, dt);
-    drone_state.dyaw_z   = integrator_gz->update(drone_state.gz, dt);
+    // // get current angular movements
+    // drone_state.droll_x  = integrator_gx->update(drone_state.gx, dt);   // получаем углы через угловые скорости
+    // drone_state.dpitch_y = integrator_gy->update(drone_state.gy, dt);
+    // drone_state.dyaw_z   = integrator_gz->update(drone_state.gz, dt);
 
-    drone_state.roll_x  += drone_state.droll_x;
-    drone_state.pitch_y += drone_state.dpitch_y;
-    drone_state.yaw_z   += drone_state.dyaw_z;
+    // drone_state.roll_x  += drone_state.droll_x;
+    // drone_state.pitch_y += drone_state.dpitch_y;
+    // drone_state.yaw_z   += drone_state.dyaw_z;
 
     // Serial.print("     roll_x:");
     // Serial.print(drone_state.roll_x);
@@ -190,15 +212,21 @@ void get_location()
     // Serial.println(drone_state.yaw_z);
 
     calculate_aW();                                                     // получаем мировые ускорения
+    // Serial.print("\taxW:");
+    // Serial.print(drone_state.axW);
+    // Serial.print("     ayW:");
+    // Serial.print(drone_state.ayW);
+    // Serial.print("     azW:");
+    // Serial.println(drone_state.azW);
 
     // if (abs(drone_state.axW) <= 0.03) drone_state.axW = 0;              // фильтруем мировые ускорения
     // if (abs(drone_state.ayW) <= 0.03) drone_state.ayW = 0;
     // if (abs(1 - drone_state.azW) <= 0.05) drone_state.azW = 1;
 
     // get current linear velocities in GSK
-    drone_state.dvxW = integrator_ax->update(drone_state.axW*9.81,        dt);    // получаем линейные скорости через ускорения
-    drone_state.dvyW = integrator_ay->update(drone_state.ayW*9.81,        dt);
-    drone_state.dvzW = integrator_az->update(drone_state.azW*9.81 - 9.81, dt);
+    // drone_state.dvxW = integrator_ax->update(drone_state.axW*9.81,        dt);    // получаем линейные скорости через ускорения
+    // drone_state.dvyW = integrator_ay->update(drone_state.ayW*9.81,        dt);
+    // drone_state.dvzW = integrator_az->update(drone_state.azW*9.81 - 9.81, dt);
 
     // Serial.print("     dvxW:");
     // Serial.print(drone_state.dvxW, 6);
@@ -207,14 +235,14 @@ void get_location()
     // Serial.print("     dvzW:");
     // Serial.print(drone_state.dvzW, 6);   
 
-    drone_state.vxW += drone_state.dvxW;
-    drone_state.vyW += drone_state.dvyW;
-    drone_state.vzW += drone_state.dvzW;
+    // drone_state.vxW += drone_state.dvxW;
+    // drone_state.vyW += drone_state.dvyW;
+    // drone_state.vzW += drone_state.dvzW;
 
     // get current linear movement
-    drone_state.dxW = integrator_vx->update(drone_state.vxW, dt);     // получаем линейные перемещения через скорости
-    drone_state.dyW = integrator_vy->update(drone_state.vyW, dt);
-    drone_state.dzW = integrator_vz->update(drone_state.vzW, dt);
+    // drone_state.dxW = integrator_vx->update(drone_state.vxW, dt);     // получаем линейные перемещения через скорости
+    // drone_state.dyW = integrator_vy->update(drone_state.vyW, dt);
+    // drone_state.dzW = integrator_vz->update(drone_state.vzW, dt);
 
     // Serial.print("     dxW:");
     // Serial.print(drone_state.dxW, 6);
@@ -223,13 +251,13 @@ void get_location()
     // Serial.print("     dzW:");
     // Serial.print(drone_state.dzW, 6);        !!
 
-    drone_state.xW += drone_state.dxW;
-    drone_state.yW += drone_state.dyW;
-    drone_state.zW += drone_state.dzW;
+    // drone_state.xW += drone_state.dxW;
+    // drone_state.yW += drone_state.dyW;
+    // drone_state.zW += drone_state.dzW;
 
-    aclFromIMU   = trunc(drone_state.axW*1000);
-    velFromIMU   = trunc(drone_state.vxW*1000);
-    moveFromIMU  = trunc(drone_state.xW*1000);
+    // aclFromIMU   = trunc(drone_state.axW*1000);
+    // velFromIMU   = trunc(drone_state.vxW*1000);
+    // moveFromIMU  = trunc(drone_state.xW*1000);
 
 
 
@@ -242,12 +270,7 @@ void get_location()
     // Serial.print("\taz:");
     // Serial.println(drone_state.az);
 
-    // Serial.print("\taxW:");
-    // Serial.print(drone_state.axW);
-    // Serial.print("     ayW:");
-    // Serial.print(drone_state.ayW);
-    // Serial.print("     azW:");
-    // Serial.println(drone_state.azW);
+
 
     // Serial.print("\tgps_lat:");
     // Serial.print(drone_state.gps_lat);
@@ -355,6 +378,11 @@ void get_location()
     float gx;
     float gy;
     float gz;
+    float gt;
+
+    float mx;
+    float my;
+    float mz; 
 
     bool firstMadgwickMeasure = true;
     float offset_roll_x   = 0;
@@ -450,9 +478,9 @@ private:
 
   void sendPositionToControllerUART(){
 
-    int axmm = trunc(drone_state.ax*1000);
-    int aymm = trunc(drone_state.ay*1000);
-    int azmm = trunc(drone_state.az*1000);
+    // int axmm = trunc(drone_state.ax*1000);
+    // int aymm = trunc(drone_state.ay*1000);
+    // int azmm = trunc(drone_state.az*1000);
 
     long lat_from_gps = trunc(drone_state.gps_lat*1000000);
     long lon_from_gps = trunc(drone_state.gps_lon*1000000);
@@ -462,9 +490,16 @@ private:
     // Serial.write((uint8_t*)&axmm, sizeof(axmm));
     // Serial.write((uint8_t*)&aymm, sizeof(aymm));
     // Serial.write((uint8_t*)&azmm, sizeof(azmm));
-    // Serial.write((uint8_t*)&lat_from_gps, sizeof(lat_from_gps));
-    // Serial.write((uint8_t*)&lon_from_gps, sizeof(lon_from_gps));
-    // Serial.write((uint8_t*)&alt_from_gps, sizeof(alt_from_gps));
+
+    // send gps data
+    Serial.write((uint8_t*)&lat_from_gps, sizeof(lat_from_gps));
+    Serial.write((uint8_t*)&lon_from_gps, sizeof(lon_from_gps));
+    Serial.write((uint8_t*)&alt_from_gps, sizeof(alt_from_gps));
+
+    // send angles data
+    Serial.write((uint8_t*)&drone_state.roll_x_from_Madgwick, sizeof(drone_state.roll_x_from_Madgwick));
+    Serial.write((uint8_t*)&drone_state.pitch_y_from_Madgwick, sizeof(drone_state.pitch_y_from_Madgwick));
+    Serial.write((uint8_t*)&drone_state.yaw_z_from_Madgwick, sizeof(drone_state.yaw_z_from_Madgwick));
 
     // Serial.print("\taxWmm:");
     // Serial.print(axWmm);
